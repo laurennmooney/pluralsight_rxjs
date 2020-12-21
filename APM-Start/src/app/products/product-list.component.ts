@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
-import { EMPTY } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { BehaviorSubject, combineLatest, EMPTY, Subject, VirtualTimeScheduler } from 'rxjs';
+import { catchError, filter, map, timestamp } from 'rxjs/operators';
+import { ProductCategoryService } from '../product-categories/product-category.service';
 
 import { ProductService } from './product.service';
 
@@ -11,24 +12,44 @@ import { ProductService } from './product.service';
 })
 export class ProductListComponent {
   pageTitle = 'Product List';
-  errorMessage = '';
-  categories;
+  private errorMessageSubject = new Subject<string>();
+  errorMessage$ = this.errorMessageSubject.asObservable();
+  selectedCatgoryId = 1;
 
-  products$ = this.productService.products$
+  private categorySelectedSubject = new BehaviorSubject<number>(0);
+  categorySelectedAction$ = this.categorySelectedSubject.asObservable();
+
+  products$ = combineLatest([
+    this.productService.productsWithAdd$,
+    this.categorySelectedAction$
+  ]) 
     .pipe(
+      map(([products, selectedCatgoryId]) => 
+        products.filter(product => 
+          selectedCatgoryId ? product.categoryId === selectedCatgoryId : true
+        )),
       catchError(error => {
-        this.errorMessage = error;
+        this.errorMessageSubject.next(error);
         return EMPTY;
     })
   );
 
-  constructor(private productService: ProductService) { }
+  categories$ = this.productCategoryService.productCategories$
+  .pipe(
+    catchError(error => {
+      this.errorMessageSubject.next(error);
+      return EMPTY;
+    })
+  )
+
+  constructor(private productService: ProductService,
+    private productCategoryService: ProductCategoryService) { }
 
   onAdd(): void {
-    console.log('Not yet implemented');
+    this.productService.addProduct();
   }
 
   onSelected(categoryId: string): void {
-    console.log('Not yet implemented');
+    this.categorySelectedSubject.next(+categoryId);
   }
 }
